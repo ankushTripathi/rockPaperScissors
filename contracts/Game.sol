@@ -4,12 +4,16 @@ contract Game{
 
     mapping (address => uint) public balances;
 
-    uint8[3][3] evaluate;
+    mapping( bytes32 => mapping(bytes32 => uint8)) evaluate;
 
     address player;
     uint public wager;
-    uint8 move;
+    bytes32 hashedMove;
 
+    event LogNewGame(address newPlayer, uint newWager);
+    event LogWinner(address indexed winner, uint amountWon);
+    event LogDraw(address player1,address player2);
+    event LogWithdrawBalance(address indexed player, uint amount);
 
     constructor (){
 
@@ -23,16 +27,19 @@ contract Game{
         * 1 => loose
         * 2 => win
         */
-        evaluate[0][0] = 0;
-        evaluate[0][1] = 1;
-        evaluate[0][2] = 2;
-        evaluate[1][0] = 2;
-        evaluate[1][1] = 0;
-        evaluate[1][2] = 1;
-        evaluate[2][0] = 1;
-        evaluate[2][1] = 2;
-        evaluate[2][2] = 0;
+        bytes32 z = keccak256(0);
+        bytes32 o = keccak256(1);
+        bytes32 t = keccak256(2);
         
+        evaluate[z][z] = 0;
+        evaluate[z][o] = 1;
+        evaluate[z][t] = 2;
+        evaluate[o][z] = 2;
+        evaluate[o][o] = 0;
+        evaluate[o][t] = 1;
+        evaluate[t][z] = 1;
+        evaluate[t][o] = 2;
+        evaluate[t][t] = 0;
     }
 
     function isNewGame() public view returns(bool){
@@ -51,10 +58,11 @@ contract Game{
 
         if(player == 0){
 
-            move = _move;
+            hashedMove = keccak256(_move);
             player = msg.sender;
             wager = msg.value;
             balances[player] += wager;
+            emit LogNewGame(player,wager);
             return;
         }
 
@@ -63,24 +71,29 @@ contract Game{
 
         balances[msg.sender] += wager;
 
-        if(evaluate[move][_move] == 2){
+        bytes32 _hashedMove = keccak256(_move);
+        if(evaluate[hashedMove][_hashedMove] == 2){
          
             balances[player] += wager;
             balances[msg.sender] -= wager;
+            emit LogWinner(player,2*wager);
         }
-        else if(evaluate[move][_move] == 1){
+        else if(evaluate[hashedMove][_hashedMove] == 1){
          
             balances[player] -= wager;
             balances[msg.sender] += wager;
+            emit LogWinner(msg.sender,2*wager);
         }
+        else
+            emit LogDraw(player,msg.sender);
 
         player = 0;
     }
 
     function withdraw() public {
 
-        require(balances[msg.sender] > 0);
         uint amount = balances[msg.sender];
+        require(amount > 0);
         balances[msg.sender] = 0;
         msg.sender.transfer(amount);
     }
